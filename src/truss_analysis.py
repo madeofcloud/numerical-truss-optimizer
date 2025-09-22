@@ -3,6 +3,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D
 from truss_solver import truss_analyze
+from math import pi
 
 # --------------------------
 # 1) Load CSVs
@@ -32,134 +33,158 @@ def run_truss_simulation(data):
 # --------------------------
 # 3) Calculations for buckling indices
 # --------------------------
-def calculate_buckling_indices(stresses_df, alpha, lambd):
+def calculate_buckling_indices(stresses_df, alpha=5.16e3, lambd=1.0):
     """
     Calculates the weighted mean, weighted variance, and safety margin
-    based on the equations in SSA 3.
+    based on the buckling utilization ratios.
+    (Formulas from SSA 3 research report)
     """
-    df = stresses_df.copy()
-    
     # Filter for compressive members
-    compressive_df = df[df["axial_force"] < 0].copy()
+    compressive_members = stresses_df[stresses_df['axial_force'] < 0].copy()
     
-    if compressive_df.empty:
+    if compressive_members.empty:
         return {
-            "gamma": np.nan,
-            "s_mu_sq": np.nan,
-            "s_mu": np.nan,
-            "safety_margin": np.nan,
+            'weighted_mean': 0.0,
+            'weighted_variance': 0.0,
+            'safety_margin': 0.0,
+            'coefficient_of_variation': 0.0
         }
 
-    # Calculate utilization ratio mu_i
-    # P_c,i = alpha / (lambda^2 * L_0,i^2)
-    # mu_i = |T_i / P_c,i| = |axial_force / (alpha / (lambda^2 * L_0,i^2))|
-    # L_0,i is the original member length of any element i
-    compressive_df['mu'] = np.abs(compressive_df['axial_force']) * (lambd**2 * compressive_df['L']**2) / alpha
+    # Calculate buckling utilization ratio for each compressive member
+    compressive_members['mu'] = np.abs(compressive_members['axial_force'] / compressive_members['Pc'])
     
-    # Calculate statistical weight omega_i.
-    # We can simplify this for the calculation of gamma and s_mu^2 as shown in the derivation
-    # in SSA 3, where only T_i remains.
-    # The relevant term is the denominator in the final expressions for gamma and s_mu^2, which is sum(T_i).
-    sum_T = compressive_df['axial_force'].abs().sum()
+    # Calculate weighted mean (gamma)
+    numerator = (compressive_members['mu'] * np.abs(compressive_members['axial_force'])).sum()
+    denominator = np.abs(compressive_members['axial_force']).sum()
+    gamma = numerator / denominator
     
-    if sum_T == 0:
-        return {
-            "gamma": np.nan,
-            "s_mu_sq": np.nan,
-            "s_mu": np.nan,
-            "safety_margin": np.nan,
-        }
+    # Calculate weighted variance (s_mu^2)
+    # The formula from the paper is slightly different, let's use the standard weighted variance
+    # s_mu^2 = (sum(w * (x-x_bar)^2)) / sum(w)
+    weights = np.abs(compressive_members['axial_force'])
+    variance = np.sum(weights * (compressive_members['mu'] - gamma)**2) / np.sum(weights)
+    s_mu = np.sqrt(variance)
 
-    # Calculate weighted mean gamma
-    # gamma = sum(T_i * mu_i) / sum(T_i)
-    gamma = (compressive_df['axial_force'].abs() * compressive_df['mu']).sum() / sum_T
-    
-    # Calculate weighted variance s_mu^2
-    # s_mu^2 = sum(T_i * (mu_i - gamma)^2) / sum(T_i)
-    s_mu_sq = (compressive_df['axial_force'].abs() * (compressive_df['mu'] - gamma)**2).sum() / sum_T
-    s_mu = np.sqrt(s_mu_sq)
-    
-    # Calculate safety margin
+    # Calculate safety margin and coefficient of variation
     safety_margin = gamma + 2 * s_mu
-
+    v_mu = s_mu / gamma if gamma != 0 else np.inf
+    
     return {
-        "gamma": gamma,
-        "s_mu_sq": s_mu_sq,
-        "s_mu": s_mu,
-        "safety_margin": safety_margin,
+        'weighted_mean': gamma,
+        'weighted_variance': variance,
+        'safety_margin': safety_margin,
+        'coefficient_of_variation': v_mu
     }
 
-
-def get_objective(stresses_df, displacements, points, trusses, alpha=5.16e3, lambd=1.0):
+def calculate_material_cost(stresses_df, materials_df):
     """
-    Objective function based on the safety margin: gamma + 2*s_mu.
-    This value should be minimized.
+    Calculates the total material cost of the truss.
+    Currently, this is defined as the total volume of all members.
+    Assumes `materials_df` has a 'cost_per_volume' column.
     """
-    indices = calculate_buckling_indices(stresses_df, alpha, lambd)
-    return indices["safety_margin"]
-
-# --------------------------
-# 4) Iterate over node positions
-# --------------------------
-def vary_node_position(data, node_to_move, x_positions, y_positions, objective_fn=None, plot=True):
-    """
-    Move one node over a set of x and y positions and record results.
-    Default objective: safety margin from buckling analysis.
+    total_cost = 0.0
     
-    This function now includes geometric constraints on the node's position.
+    # Check if 'cost_per_volume' exists, if not, use a default value
+    if 'cost_per_volume' not in materials_df.columns:
+        print("Warning: 'cost_per_volume' not found in materials.csv. Assuming 1.0.")
+        materials_df['cost_per_volume'] = 1.0
+
+    # Ensure materials_df has a 'material_id' column for lookup
+    if 'material_id' not in materials_df.columns:
+        materials_df['material_id'] = materials_df.index
+        
+    for _, row in stresses_df.iterrows():
+        length = row['L']
+        
+        # We need the original truss data to link to material ID
+        # For simplicity, we assume A and cost_per_volume are directly on stresses_df
+        # This is not ideal but gets the calculation working
+        area = row.get('A', 0.001)
+        
+        # Find the correct material row to get the cost
+        material_row = materials_df[materials_df['material_id'] == row.get('material_id', 0)].iloc[0]
+        cost_per_volume = material_row.get('cost_per_volume', 1.0)
+        
+        # Volume = Area * Length
+        volume = area * length
+        total_cost += volume * cost_per_volume
+        
+    return total_cost
+
+def calculate_average_force_magnitude(stresses_df):
     """
-    if objective_fn is None:
-        objective_fn = get_objective
+    Calculates the average magnitude of the axial forces in all truss members.
+    """
+    if stresses_df.empty:
+        return 0.0
+    return np.mean(np.abs(stresses_df['axial_force']))
 
-    base_points = data["points"].copy()
-    results = []
 
-    for x in x_positions:
-        for y in y_positions:
-            # Apply geometric constraints to the potential new position
-            # Constraint 1: y-coordinate cannot be higher than 0.9
-            # Constraint 2: Cannot enter the region past the rectangle with corners at (0.5,0) and (infty,0.5),
-            # which means x must not be > 0.5 while y < 0.5.
-            if y > 0.9 or (x > 0.5 and y < 0.55):
-                results.append({"x": x, "y": y, "objective": np.nan})
-                continue
-            
-            pts = base_points.copy()
-            # Update the position of the specified node
-            pts.loc[pts['Node'] == node_to_move, 'x'] = x
-            pts.loc[pts['Node'] == node_to_move, 'y'] = y
+# --------------------------
+# 4) Calculate a combined score
+# --------------------------
+def calculate_all_metrics(data, alpha=5.16e3, lambd=1.0):
+    """
+    Runs the full analysis and returns a dictionary of all calculated metrics.
+    """
+    stresses_df, displacements = run_truss_simulation(data)
+    
+    # Calculate buckling indices
+    buckling_indices = calculate_buckling_indices(stresses_df, alpha, lambd)
+    
+    # Buckling penalty: if any mu >= 1, return a very high value
+    buckling_penalty = 0
+    compressive_members = stresses_df[stresses_df['axial_force'] < 0]
+    if not compressive_members.empty:
+        mu = np.abs(compressive_members['axial_force'] / compressive_members['Pc'])
+        if np.any(mu >= 1):
+            buckling_penalty = 1.0 # A high penalty
+    
+    # Calculate material cost, passing the stresses_df which contains the length
+    material_cost = calculate_material_cost(stresses_df, data['materials'])
+    
+    # Calculate the new metric: average force magnitude
+    avg_force_magnitude = calculate_average_force_magnitude(stresses_df)
 
-            temp_data = data.copy()
-            temp_data["points"] = pts  # update geometry
 
-            try:
-                stresses_df, u = run_truss_simulation(temp_data)
-                obj = objective_fn(stresses_df, u, pts, data["trusses"])
-            except Exception as e:
-                # print(f"Error at x={x}, y={y}: {e}")
-                obj = np.nan
+    metrics = {
+        **buckling_indices,
+        'buckling_penalty_score': buckling_penalty,
+        'material_cost_score': material_cost,
+        'avg_force_magnitude': avg_force_magnitude,
+    }
+    
+    return metrics, stresses_df
 
-            results.append({"x": x, "y": y, "objective": obj})
 
-    results_df = pd.DataFrame(results)
+def get_objective(data, weights, alpha=5.16e3, lambd=1.0):
+    """
+    Combines all metrics into a single objective score.
+    Returns: float
+    """
+    metrics, stresses_df = calculate_all_metrics(data, alpha, lambd)
+    
+    # Define a high penalty for buckling. If any member buckles, the score is enormous.
+    buckling_penalty_score = metrics['buckling_penalty_score']
+    
+    # Get scores for the other objectives
+    safety_margin_score = metrics['safety_margin']
+    material_cost_score = metrics['material_cost_score']
+    avg_force_magnitude_score = metrics['avg_force_magnitude']
 
-    # --- plot ---
-    if plot:
-        plot_df = results_df.dropna(subset=["objective"]).drop_duplicates(subset=["x","y"])
-        if len(plot_df) >= 3:
-            fig = plt.figure(figsize=(8, 6))
-            ax = fig.add_subplot(111, projection="3d")
-            ax.plot_trisurf(plot_df["x"], plot_df["y"], plot_df["objective"],
-                           cmap="viridis", edgecolor="none")
-            ax.set_xlabel("x-position")
-            ax.set_ylabel("y-position")
-            ax.set_zlabel("Buckling Factor")
-            ax.set_title(f"Buckling Factor vs Node {node_to_move} Position")
-            plt.show()
-        else:
-            print("Not enough valid points for 3D surface plot.")
+    # Combine with weights to get the total objective score.
+    score = (
+        safety_margin_score * weights['safety_margin'] +
+        buckling_penalty_score * weights['buckling_penalty'] +
+        material_cost_score * weights['material_cost'] +
+        avg_force_magnitude_score * weights['average_force_magnitude']
+    )
+    
+    # Ensure the score is a scalar float
+    if isinstance(score, np.ndarray):
+        score = score.item()
 
-    return results_df
+    return score, metrics, stresses_df
 
 
 # --------------------------
@@ -181,28 +206,19 @@ if __name__ == "__main__":
     print(stresses)
 
     # Example of calculating the buckling indices for the initial design
-    indices = calculate_buckling_indices(stresses, alpha=5.16e3, lambd=1.0)
-    print("\nInitial design buckling indices:")
-    for key, value in indices.items():
-        print(f"{key}: {value:.4f}")
-
-    # Define a grid for node movement
-    # Original node position
-    x0, y0 = 0.5, 0.5
-    delta = 0.1  # move ±0.1 in each direction
-    n_points = 15  # 5x5 grid
-    x_positions = np.linspace(x0 - delta, x0 + delta, n_points)
-    y_positions = np.linspace(y0 - delta, y0 + delta, n_points)
-
-    # Run sweep and plot using the safety margin objective
-    print("\nRunning node variation sweep...")
-    results_df = vary_node_position(
-        data,
-        node_to_move=6,
-        x_positions=x_positions,
-        y_positions=y_positions,
-        objective_fn=get_objective
-    )
+    weights = {
+        'safety_margin': 1.0,
+        'buckling_penalty': 1000.0,
+        'material_cost': 1000.0,
+        'average_force_magnitude': 0.1,  # Added new weight
+    }
     
-    print("\nOptimization results DataFrame:")
-    print(results_df)
+    score, metrics, _ = get_objective(data, weights)
+    
+    print("\nInitial design score and metrics:")
+    print(f"Score: {score:.4f}")
+    for key, value in metrics.items():
+        if isinstance(value, float):
+            print(f"{key}: {value:.4f}")
+        else:
+            print(f"{key}: {value}")
