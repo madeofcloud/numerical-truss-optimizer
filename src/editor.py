@@ -30,15 +30,19 @@ import math
 import tempfile
 import numpy as np
 import pandas as pd
-from PyQt5.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
+
+# Convert ALL PyQt5 imports to PySide6
+from PySide6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
                              QLabel, QPushButton, QCheckBox, QLineEdit, QFileDialog, QSlider,
                              QGridLayout, QMessageBox, QFrame, QSizePolicy, QGroupBox,
                              QComboBox, QStackedWidget, QTableView, QAbstractItemView,
-                             QToolBar, QAction, QInputDialog, QActionGroup) # <-- QActionGroup added
-from PyQt5.QtCore import Qt, QAbstractTableModel, QModelIndex, QVariant, pyqtSignal, QSize, QByteArray # <-- QByteArray added
-from PyQt5.QtGui import QIcon, QPixmap, QPainter, QColor, QFont
-from PyQt5.QtSvg import QSvgRenderer # <-- QtSvg dependency added
-from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
+                             QToolBar, QInputDialog)
+# QVariant REMOVED. QAction/QActionGroup MOVED to QtGui.
+from PySide6.QtCore import Qt, QAbstractTableModel, QModelIndex, Signal, QSize, QByteArray 
+from PySide6.QtGui import QIcon, QPixmap, QPainter, QColor, QFont, QAction, QActionGroup
+from PySide6.QtSvg import QSvgRenderer
+# Update Matplotlib backend for PySide6/PyQt6 compatibility
+from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg as FigureCanvas 
 from matplotlib.figure import Figure
 import matplotlib.pyplot as plt
 
@@ -122,94 +126,126 @@ def get_icon(tool_name):
 
 class PandasModel(QAbstractTableModel):
     """A minimal editable QAbstractTableModel wrapping a pandas DataFrame."""
-    dataChangedSignal = pyqtSignal()
+    dataChangedSignal = Signal()
 
-    def __init__(self, df=pd.DataFrame(), parent=None):
+    # Correct __init__ to accept and pass 'parent'
+    def __init__(self, data=None, parent=None): 
         super().__init__(parent)
-        self._df = df.copy()
+        self._data = data if data is not None else pd.DataFrame()
+
+    # Added dataframe getter (to fix previous error)
+    def dataframe(self):
+        """Returns the underlying pandas DataFrame (needed by editor.py's logic)."""
+        return self._data
+    
+    def set_dataframe(self, data):
+        self.layoutAboutToBeChanged.emit()
+        self._data = data
+        self.layoutChanged.emit()
+        self.dataChangedSignal.emit()
 
     def rowCount(self, parent=QModelIndex()):
-        return len(self._df.index)
+        return self._data.shape[0]
 
     def columnCount(self, parent=QModelIndex()):
-        return len(self._df.columns)
+        return self._data.shape[1]
 
     def data(self, index, role=Qt.DisplayRole):
         if not index.isValid():
-            return QVariant()
-        r, c = index.row(), index.column()
-        val = self._df.iloc[r, c]
+            return None
+
         if role == Qt.DisplayRole or role == Qt.EditRole:
-            return str(val) if not pd.isna(val) else ""
-        return QVariant()
+            value = self._data.iloc[index.row(), index.column()]
+            return str(value) if pd.api.types.is_numeric_dtype(value) else value
 
-    def headerData(self, section, orientation, role=Qt.DisplayRole):
-        if role != Qt.DisplayRole:
-            return QVariant()
-        if orientation == Qt.Horizontal:
-            return str(self._df.columns[section])
-        else:
-            return str(self._df.index[section])
+        if role == Qt.TextAlignmentRole:
+            return Qt.AlignCenter
 
-    def flags(self, index):
-        if not index.isValid():
-            return Qt.ItemIsEnabled
-        return Qt.ItemIsSelectable | Qt.ItemIsEnabled | Qt.ItemIsEditable
+        return None
 
     def setData(self, index, value, role=Qt.EditRole):
         if role == Qt.EditRole:
-            r, c = index.row(), index.column()
-            col = self._df.columns[c]
-            
-            # --- Robustness check for redrawing: only allow numeric/valid values for 'x'/'y' etc. ---
             try:
-                if self._df.columns[c] in ['x', 'y', 'Fx', 'Fy', 'E', 'A', 'Node', 'start', 'end', 'element']:
-                    if pd.api.types.is_integer_dtype(self._df[col].dtype) or self._df.columns[c] in ['Node', 'start', 'end', 'element']:
-                        new_value = int(value)
-                    elif pd.api.types.is_float_dtype(self._df[col].dtype):
-                        new_value = float(value)
-                    else:
-                        new_value = value
+                col_name = self._data.columns[index.column()]
+                target_dtype = self._data[col_name].dtype
+                
+                if pd.api.types.is_numeric_dtype(target_dtype):
+                    converted_value = target_dtype.type(value)
                 else:
-                    new_value = value
+                    converted_value = value
+
+                self._data.iloc[index.row(), index.column()] = converted_value
+                
+                self.dataChanged.emit(index, index)
+                self.dataChangedSignal.emit()
+                return True
             except Exception:
-                # If conversion fails for a numeric column, reject the edit or revert.
-                if self._df.columns[c] in ['x', 'y', 'Fx', 'Fy', 'E', 'A', 'Node', 'start', 'end', 'element']:
-                    QMessageBox.warning(self.parent(), "Input Error", 
-                                        f"Value must be a valid number for column '{col}'. Edit rejected.")
-                    return False
-                new_value = value # Fallback to string if not critical
-            # --- End Robustness Check ---
-            
-            self._df.iloc[r, c] = new_value
-            self.dataChanged.emit(index, index, [Qt.DisplayRole])
-            self.dataChangedSignal.emit() # Signal for the editor to redraw on edit completion
-            return True
+                return False
         return False
 
-    def set_dataframe(self, df):
-        self.beginResetModel()
-        self._df = df.copy()
-        self.endResetModel()
-        self.dataChangedSignal.emit()
+    def headerData(self, section, orientation, role=Qt.DisplayRole):
+        if role == Qt.DisplayRole:
+            if orientation == Qt.Horizontal:
+                return str(self._data.columns[section])
+            if orientation == Qt.Vertical:
+                return str(self._data.index[section])
+        return None
+        
+    def flags(self, index):
+        if index.column() == 0:
+            return Qt.ItemIsEnabled | Qt.ItemIsSelectable
+        
+        return Qt.ItemIsEditable | Qt.ItemIsEnabled | Qt.ItemIsSelectable
 
-    def dataframe(self):
-        return self._df.copy()
-
-    def insert_row(self, values=None):
-        values = values or {}
+    # Correctly named method for inserting a row
+    def addRow(self, values=None):
+        """
+        Adds a new row to the DataFrame. 
+        It uses the provided 'values' dictionary or defaults to generating a new row.
+        """
+        
         self.beginInsertRows(QModelIndex(), self.rowCount(), self.rowCount())
-        new_row = {c: values.get(c, np.nan) for c in self._df.columns}
-        self._df = pd.concat([self._df, pd.DataFrame([new_row])], ignore_index=True)
+        
+        if values is None:
+            # If no values are passed (e.g., if called without arguments), generate a row
+            new_row_data = {col: np.nan for col in self._data.columns}
+            
+            # Auto-increment the ID for the first column
+            if not self._data.empty:
+                id_col = self._data.columns[0]
+                try:
+                    next_id = self._data[id_col].astype('Int64').max() + 1
+                except:
+                    next_id = 1 
+            else:
+                id_col = self._data.columns[0]
+                next_id = 1
+            
+            new_row_data[id_col] = next_id
+            
+        else:
+            # If values are passed (as expected by TrussEditor), use them directly
+            new_row_data = values
+
+        # Create a new DataFrame row and append it
+        new_row_df = pd.DataFrame([new_row_data], columns=self._data.columns)
+        self._data = pd.concat([self._data, new_row_df], ignore_index=True)
+
         self.endInsertRows()
         self.dataChangedSignal.emit()
+        return True
 
-    def remove_row(self, row_idx):
-        if 0 <= row_idx < self.rowCount():
-            self.beginRemoveRows(QModelIndex(), row_idx, row_idx)
-            self._df = self._df.drop(self._df.index[row_idx]).reset_index(drop=True)
+    def deleteRow(self, row):
+        """Deletes a row at the given index."""
+        if 0 <= row < self.rowCount():
+            self.beginRemoveRows(QModelIndex(), row, row)
+            
+            self._data = self._data.drop(self._data.index[row]).reset_index(drop=True)
+            
             self.endRemoveRows()
             self.dataChangedSignal.emit()
+            return True
+        return False
 
 
 class MplCanvas(FigureCanvas):
@@ -482,7 +518,7 @@ class TrussEditor(QMainWindow):
         elif dfname == 'materials':
             values['material'] = f'mat{len(model.dataframe()) + 1}'
 
-        model.insert_row(values=values)
+        model.addRow(values=values)
         
         # write back immediately
         self._sync_dataframe(dfname, model.dataframe())
@@ -970,11 +1006,32 @@ class TrussEditor(QMainWindow):
             self._next_node_id = 1
             self._next_element_id = 1
             # Ensure the current model is updated, which will trigger a redraw
-            self.current_model.set_dataframe(self.points) 
+            self.current_model.set_dataframe(self.points)
 
+    pass
+
+# --- Refactored Entry Point for Unified Compilation ---
+def main():
+    """
+    Stand-alone execution entry point. 
+    Returns the window instance if called by the launcher.
+    """
+    # Use QApplication.instance() to share the app if one exists
+    app = QApplication.instance()
+    is_standalone = False
+    if app is None:
+        app = QApplication(sys.argv)
+        is_standalone = True
+
+    window = TrussEditor()
+
+    # If running standalone, show the window and start the event loop
+    if is_standalone:
+        window.show()
+        sys.exit(app.exec())
+    
+    # If called from the launcher, return the window instance for the launcher to manage
+    return window
 
 if __name__ == '__main__':
-    app = QApplication(sys.argv)
-    editor = TrussEditor()
-    editor.show()
-    sys.exit(app.exec_())
+    main()

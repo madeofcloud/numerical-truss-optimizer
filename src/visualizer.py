@@ -2,12 +2,14 @@ import sys
 import os
 import numpy as np
 import pandas as pd
-from PyQt5.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, 
+# Convert ALL PyQt5 imports to PySide6
+from PySide6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, 
                              QHBoxLayout, QLabel, QPushButton, QCheckBox, 
                              QLineEdit, QFileDialog, QSlider, QGridLayout, 
                              QMessageBox, QFrame, QSizePolicy, QGroupBox)
-from PyQt5.QtCore import Qt
-from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
+from PySide6.QtCore import Qt
+# Update Matplotlib backend for PySide6/PyQt6 compatibility
+from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg as FigureCanvas 
 from matplotlib.figure import Figure
 import matplotlib.patches as patches
 
@@ -554,10 +556,27 @@ class TrussRenderer(QMainWindow):
             except Exception as e:
                 self.status_label.setText(f"Error during export: {str(e)}")
                 QMessageBox.critical(self, "Export Error", f"Failed to save file: {str(e)}")
+    pass
 
+# --- Refactored Entry Point for Unified Compilation ---
+def main():
+    """
+    Stand-alone execution entry point. 
+    Returns the window instance if called by the launcher.
+    """
+    app = QApplication.instance()
+    is_standalone = False
+    if app is None:
+        app = QApplication(sys.argv)
+        is_standalone = True
 
-if __name__ == "__main__":
-    app = QApplication(sys.argv)
     window = TrussRenderer()
-    window.show()
-    sys.exit(app.exec_())
+    
+    if is_standalone:
+        window.show()
+        sys.exit(app.exec())
+    
+    return window
+
+if __name__ == '__main__':
+    main()
