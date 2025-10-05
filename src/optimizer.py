@@ -37,7 +37,19 @@ def optimize_truss(data, nodes_to_optimize, weights):
 
         temp_data = current_data.copy()
         temp_data["points"] = new_points_df
+
+        # Ensure original geometry is stored for normalization purposes
+        if "original_points" not in temp_data:
+            temp_data["original_points"] = data["points"].copy()
+        if "original_trusses" not in temp_data:
+            temp_data["original_trusses"] = data["trusses"].copy()
+        if "original_lengths" not in temp_data:
+            temp_data["original_lengths"] = data["L"].copy() if "L" in data else None
+        # if "original_forces" not in temp_data:
+        #     temp_data["original_forces"] = data["original_forces"].copy() if "original_forces" in data else None
         
+        print(temp_data)  # Debug: print updated points
+
         # Calculate the objective score with the new positions
         score, metrics, _ = get_objective(temp_data, weights)
         
@@ -50,6 +62,7 @@ def optimize_truss(data, nodes_to_optimize, weights):
         # return positive when constraints are satisfied
         return [0.9 - val[i + 1] for i in range(0, len(val), 2)]  # y <= 0.9 => 0.9 - y >= 0
 
+
     def constraint_region(val):
         # Returns positive if point is outside the forbidden zone (0.5 < x < 1.1 and y < 0.5)
         constraints = []
@@ -60,11 +73,18 @@ def optimize_truss(data, nodes_to_optimize, weights):
             else:
                 constraints.append(0.0)  # no constraint violation
         return constraints
-    
+
+
+    def constraint_x_upper(val):
+        # x <= 1.2 => 1.2 - x >= 0
+        return [1.2 - val[i] for i in range(0, len(val), 2)]
+
+
     # Combine constraints
     constraints = [
         {'type': 'ineq', 'fun': constraint_y},
-        {'type': 'ineq', 'fun': constraint_region}
+        {'type': 'ineq', 'fun': constraint_region},
+        {'type': 'ineq', 'fun': constraint_x_upper}
     ]
 
     # Optionally define bounds (e.g., x and y in [0, 2])

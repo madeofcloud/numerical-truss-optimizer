@@ -37,6 +37,23 @@ def run_truss_simulation(data):
 
     return stresses_df, displacements
 
+def calculate_original_member_lengths(points_df, trusses_df):
+    """
+    Calculate the original (undeformed) length of each truss member.
+    Returns a pandas Series with length for each element in trusses_df.
+    """
+    lengths = []
+    node_coords = points_df.set_index('Node')[['x', 'y']]
+
+    for _, row in trusses_df.iterrows():
+        n1, n2 = row['start'], row['end']
+        p1 = node_coords.loc[n1].values
+        p2 = node_coords.loc[n2].values
+        L0 = np.linalg.norm(p2 - p1)
+        lengths.append(L0)
+
+    return pd.Series(lengths, index=trusses_df.index)
+
 # --------------------------
 # 3) Calculations for buckling indices and other metrics
 # --------------------------
@@ -84,42 +101,13 @@ def calculate_buckling_indices(stresses_df, alpha=5.16e3, lambd=1.0):
         'coefficient_of_variation': v_mu # Used for $O_u$
     }
 
-def calculate_material_cost(stresses_df, materials_df):
+def calculate_material_usage(A, L):
     """
-    Calculates the total material cost of the truss ($O_m$).
-    Currently, this is defined as the total volume ($\sum A_i L_i$) of all members,
-    multiplied by a cost factor.
-    """
-    # FIX: Handle empty DataFrame gracefully
-    if stresses_df.empty:
-        # If the solver failed, we can't calculate cost, but assume a typical cost
-        # or return 0, as the penalty takes care of the score.
-        return 0.0
-    total_volume = 0.0
+    Calculates total material usage ($O_m = \sum A_i L_i$) of all members.
+    """    
+    # Volume = Area * Length for each member
+    total_volume = (A * L).sum()
     
-    # Check if 'cost_per_volume' exists, if not, use a default value
-    if 'cost_per_volume' not in materials_df.columns:
-        materials_df['cost_per_volume'] = 1.0
-
-    # Ensure materials_df has a 'material_id' column for lookup
-    if 'material_id' not in materials_df.columns:
-        materials_df['material_id'] = materials_df.index
-        
-    for _, row in stresses_df.iterrows():
-        length = row['L']
-        
-        # Area 'A' is already on stresses_df from the truss_solver
-        area = row.get('A', 0.001)
-        
-        # Find the correct material row to get the cost
-        # The material_id is assumed to be on the stresses_df (passed from truss_analyze)
-        material_row = materials_df[materials_df['material_id'] == row.get('material_id', 0)].iloc[0]
-        cost_per_volume = material_row.get('cost_per_volume', 1.0)
-        
-        # Volume = Area * Length
-        volume = area * length
-        total_volume += volume * cost_per_volume # Total Cost is sum of (Volume * Cost/Volume)
-        
     return total_volume
 
 def calculate_buckling_penalty(stresses_df):
@@ -156,7 +144,41 @@ def calculate_average_force_magnitude(stresses_df):
 
 
 # --------------------------
-# 4) Calculate a combined score
+# 4) Normalize metrics to [0, 1] which are on higher orders of magnitude
+# --------------------------
+
+def normalized_material_usage(stresses_df, original_lengths):
+    """
+    Normalize material usage O_m = sum(A_i*L_i) dynamically.
+    """
+    if stresses_df.empty:
+        return 0.0
+    
+    usage = calculate_material_usage(stresses_df['A'], stresses_df['L'])
+    max_usage = calculate_material_usage(stresses_df['A'], original_lengths)
+    return usage / max_usage if max_usage != 0 else 0.0
+
+
+def normalized_average_force(stresses_df, original_forces):
+    """
+    Normalize average internal force magnitude to [0,1] using the maximum force in the current truss.
+    """
+    if stresses_df.empty:
+        return 0.0
+    
+    avg_force = calculate_average_force_magnitude(stresses_df)
+    
+    # Use maximum absolute force among members as dynamic scaling
+    # max_force = stresses_df['axial_force'].abs().max()
+    max_force = np.mean(original_forces.abs()) if not original_forces.empty else 0.0
+    if max_force == 0:
+        return 0.0
+    
+    return avg_force / max_force
+
+
+# --------------------------
+# 5) Calculate a combined score
 # --------------------------
 def calculate_all_metrics(data, alpha=5.16e3, lambd=1.0):
     """
@@ -167,13 +189,15 @@ def calculate_all_metrics(data, alpha=5.16e3, lambd=1.0):
     # Calculate objectives as metrics
     buckling_indices = calculate_buckling_indices(stresses_df, alpha, lambd)
     buckling_penalty_score = calculate_buckling_penalty(stresses_df)
-    material_cost_score = calculate_material_cost(stresses_df, data['materials'])
-    avg_force_magnitude = calculate_average_force_magnitude(stresses_df)
+    if "original_lengths" not in data or data["original_lengths"] is None:
+        data["original_lengths"] = calculate_original_member_lengths(data["points"], data["trusses"])
+    material_usage_score = normalized_material_usage(stresses_df, data["original_lengths"])
+    avg_force_magnitude = normalized_average_force(stresses_df, data["original_forces"])
 
     metrics = {
         **buckling_indices,
         'buckling_penalty_score': buckling_penalty_score,
-        'material_cost_score': material_cost_score,
+        'material_usage_score': material_usage_score,
         'avg_force_magnitude': avg_force_magnitude,
     }
     
@@ -195,7 +219,7 @@ def get_objective(data, weights, alpha=5.16e3, lambd=1.0):
     buckling_penalty_score = metrics['buckling_penalty_score']
     
     # Material Cost ($O_m$): Material consumption
-    material_cost_score = metrics['material_cost_score']
+    material_usage_score = metrics['material_usage_score']
 
     # Compression Uniformity ($O_u$): Coefficient of variation ($\nu_{\mu}$)
     compressive_uniformity_score = metrics['coefficient_of_variation']
@@ -207,7 +231,7 @@ def get_objective(data, weights, alpha=5.16e3, lambd=1.0):
     score = (
         buckling_distribution_factor_score * weights['buckling_distribution_factor'] +
         buckling_penalty_score * weights['buckling_penalty'] +
-        material_cost_score * weights['material_cost'] +
+        material_usage_score * weights['material_usage'] +
         compressive_uniformity_score * weights['compressive_uniformity'] +
         avg_force_magnitude_score * weights['average_force_magnitude']
     )

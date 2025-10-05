@@ -167,7 +167,6 @@ def calculate_axial_forces_and_displacements(K, element_data, points_df, support
     stresses_df = pd.DataFrame(rows)
     return displacements, stresses_df
 
-
 def calculate_critical_buckling_force(stresses_df):
     """
     Calculates the critical buckling force (Pc) for each compressive member.

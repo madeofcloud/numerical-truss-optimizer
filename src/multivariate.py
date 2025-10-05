@@ -7,7 +7,7 @@ from PyQt5.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout,
                              QHBoxLayout, QLabel, QLineEdit, QPushButton,
                              QTableWidget, QTableWidgetItem, QAbstractItemView,
                              QMessageBox, QSlider, QTabWidget, QGridLayout, QFrame,
-                             QFileDialog)
+                             QFileDialog, QSplitter)
 from PyQt5.QtCore import Qt, QTimer
 from PyQt5.QtGui import QKeySequence
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
@@ -19,6 +19,192 @@ from truss_analysis import load_truss_data, get_objective, run_truss_simulation
 from optimizer import optimize_truss
 from truss_solver import truss_analyze
 import csv
+
+# -------------------- THEME DEFINITIONS --------------------
+
+LIGHT_THEME = """
+QMainWindow, QWidget {
+    background-color: #f7f7f7;
+    color: #222;
+}
+
+QFrame {
+    background-color: #fafafa;
+    border: 1px solid #d0d0d0;
+    border-radius: 6px;
+}
+
+/* Labels */
+QLabel {
+    color: #222;
+}
+
+/* Buttons */
+QPushButton {
+    background-color: #e6e6e6;
+    border: 1px solid #c0c0c0;
+    border-radius: 6px;
+    padding: 6px 12px;
+}
+QPushButton:hover {
+    background-color: #d0d0d0;
+}
+
+/* Text fields and tables */
+QLineEdit, QTableWidget {
+    background-color: #ffffff;
+    border: 1px solid #bfbfbf;
+    border-radius: 4px;
+    selection-background-color: #d0e7ff;
+    selection-color: black;
+    gridline-color: #d9d9d9;
+}
+
+/* Flatten QHeaderView (table headers) */
+QHeaderView::section {
+    background-color: #f1f1f1;
+    color: #222;
+    padding: 6px;
+    font-weight: bold;
+    border: 0px;
+    border-bottom: 1px solid #d0d0d0;
+}
+QHeaderView::section:horizontal {
+    border-right: 1px solid #d0d0d0;
+}
+QHeaderView::section:vertical {
+    border-bottom: 1px solid #d0d0d0;
+}
+QTableCornerButton::section {
+    background-color: #f1f1f1;
+    border: none;
+}
+
+/* Tabs */
+QTabWidget::pane {
+    border: 1px solid #aaa;
+    background: #ffffff;
+}
+QTabBar::tab {
+    background: #f1f1f1;
+    border: 1px solid #ccc;
+    padding: 6px 12px;
+    border-top-left-radius: 4px;
+    border-top-right-radius: 4px;
+}
+QTabBar::tab:selected {
+    background: #ffffff;
+    border-bottom-color: #ffffff;
+}
+
+/* Sliders */
+QSlider::groove:horizontal {
+    border: 1px solid #bbb;
+    height: 6px;
+    background: #ddd;
+    border-radius: 3px;
+}
+QSlider::handle:horizontal {
+    background: #5b9bd5;
+    border: 1px solid #5b9bd5;
+    width: 14px;
+    margin: -5px 0;
+    border-radius: 7px;
+}
+"""
+
+DARK_THEME = """
+QMainWindow, QWidget {
+    background-color: #2b2b2b;
+    color: #f0f0f0;
+}
+
+QFrame {
+    background-color: #323232;
+    border: 1px solid #4a4a4a;
+    border-radius: 6px;
+}
+
+/* Labels */
+QLabel {
+    color: #f0f0f0;
+}
+
+/* Buttons */
+QPushButton {
+    background-color: #3c3f41;
+    color: white;
+    border: 1px solid #5b5b5b;
+    border-radius: 6px;
+    padding: 6px 12px;
+}
+QPushButton:hover {
+    background-color: #505354;
+}
+
+/* Text fields and tables */
+QLineEdit, QTableWidget {
+    background-color: #2f2f2f;
+    color: #f0f0f0;
+    border: 1px solid #5b5b5b;
+    border-radius: 4px;
+    selection-background-color: #00bcd4;
+    selection-color: black;
+    gridline-color: #3f3f3f;
+}
+
+/* Flatten QHeaderView (table headers) */
+QHeaderView::section {
+    background-color: #3a3a3a;
+    color: #f0f0f0;
+    padding: 6px;
+    font-weight: bold;
+    border: 0px;
+    border-bottom: 1px solid #4a4a4a;
+}
+QHeaderView::section:horizontal {
+    border-right: 1px solid #4a4a4a;
+}
+QHeaderView::section:vertical {
+    border-bottom: 1px solid #4a4a4a;
+}
+QTableCornerButton::section {
+    background-color: #3a3a3a;
+    border: none;
+}
+
+/* Tabs */
+QTabWidget::pane {
+    border: 1px solid #555;
+    background: #2f2f2f;
+}
+QTabBar::tab {
+    background: #3a3a3a;
+    border: 1px solid #555;
+    padding: 6px 12px;
+    border-top-left-radius: 4px;
+    border-top-right-radius: 4px;
+}
+QTabBar::tab:selected {
+    background: #2f2f2f;
+    border-bottom-color: #2f2f2f;
+}
+
+/* Sliders */
+QSlider::groove:horizontal {
+    border: 1px solid #555;
+    height: 6px;
+    background: #444;
+    border-radius: 3px;
+}
+QSlider::handle:horizontal {
+    background: #00bcd4;
+    border: 1px solid #00bcd4;
+    width: 14px;
+    margin: -5px 0;
+    border-radius: 7px;
+}
+"""
 
 class MplCanvas(FigureCanvas):
     """A custom class to embed a Matplotlib figure into a PyQt widget."""
@@ -39,7 +225,7 @@ class Mpl3DCanvas(FigureCanvas):
 
 
 class MainWindow(QMainWindow):
-    """Main application window for the truss optimizer."""
+    """Main application window for the truss optimizer with theming support."""
     def __init__(self):
         super().__init__()
         
@@ -48,12 +234,30 @@ class MainWindow(QMainWindow):
         self.setWindowTitle("Truss Optimizer & Analysis")
         self.setGeometry(100, 100, 1400, 900)
 
+        # Track current theme
+        self.current_theme = "light"
+
         self.central_widget = QWidget()
         self.setCentralWidget(self.central_widget)
         
-        self.main_layout = QHBoxLayout(self.central_widget)
-        self.create_control_panel()
-        self.create_visualization_panel()
+        # Splitter for adjustable panes
+        self.splitter = QSplitter(Qt.Horizontal)
+        self.main_layout = QVBoxLayout(self.central_widget)
+        self.main_layout.addWidget(self.splitter)
+
+        # Create panels
+        self.control_panel = self.create_control_panel()
+        self.viz_panel = self.create_visualization_panel()
+
+        # Add to splitter
+        self.splitter.addWidget(self.control_panel)
+        self.splitter.addWidget(self.viz_panel)
+
+        # Set initial sizes and prevent jitter
+        self.control_panel.setMinimumWidth(380)
+        self.control_panel.setMaximumWidth(480)
+        self.splitter.setSizes([420, 980])  # Default ratio
+        self.splitter.setStretchFactor(1, 1)
         
         # Create a directory for outputs
         self.output_dir = os.path.join(os.getcwd(), 'output', datetime.now().strftime('%Y-%m-%d_%H-%M-%S'))
@@ -62,13 +266,24 @@ class MainWindow(QMainWindow):
         # Initial status
         self.status_label.setText("Please select a design directory.")
 
+        # Apply initial theme
+        self.apply_theme("light")
+
     def create_control_panel(self):
         """Creates the control panel on the left side of the UI."""
         control_panel = QWidget()
         control_layout = QVBoxLayout(control_panel)
         control_layout.setAlignment(Qt.AlignTop)
 
-        # Design Selection
+        # --- 🌗 Theme Toggle Button ---
+        theme_button = QPushButton("🌙 Dark Mode")
+        theme_button.setToolTip("Toggle between light and dark theme")
+        theme_button.clicked.connect(self.toggle_theme)
+        theme_button.setFixedWidth(150)
+        control_layout.addWidget(theme_button)
+        self.theme_button = theme_button
+
+        # --- Design Selection ---
         design_group = QFrame()
         design_layout = QVBoxLayout(design_group)
         design_group.setFrameShape(QFrame.StyledPanel)
@@ -77,17 +292,16 @@ class MainWindow(QMainWindow):
         path_layout = QHBoxLayout()
         self.path_line_edit = QLineEdit(self.current_data_dir)
         self.path_line_edit.setReadOnly(True)
-        self.path_line_edit.setMaximumWidth(200) # Set a conservative max length
+        self.path_line_edit.setMaximumWidth(200)
         path_layout.addWidget(self.path_line_edit)
         
         select_button = QPushButton("Select Directory...")
         select_button.clicked.connect(self.select_design_directory)
         path_layout.addWidget(select_button)
         design_layout.addLayout(path_layout)
-
         control_layout.addWidget(design_group)
 
-        # Optimization Parameters
+        # --- Optimization Parameters ---
         param_group = QFrame()
         param_layout = QGridLayout(param_group)
         param_group.setFrameShape(QFrame.StyledPanel)
@@ -96,13 +310,12 @@ class MainWindow(QMainWindow):
         self.weights_sliders = {}
         row = 1
         
-        # Define sliders with their tooltips and initial values, based on SSA 7 objectives
         sliders_config = [
-            ("Buckling Distribution Factor", 25.0, "Weight for the Buckling Distribution Factor ($O_d = \gamma+2s_{\mu}$). Lower values prioritize safety."),
-            ("Buckling Penalty", 100.0, "Weight for the Buckling Failure Penalty ($O_b$). A very high value ensures the optimizer avoids any design that causes $\mu_i \ge 1$."),
-            ("Material Cost", 50.0, "Weight for the Material Cost ($O_m = \sum A_i L_i$). Higher values prioritize lighter designs."),
-            ("Compression Uniformity", 10.0, "Weight for the Compression Uniformity ($O_u = s_{\mu}/\gamma$)."),
-            ("Average Force Magnitude", 40, "Weight for the Average Magnitude of Internal Forces ($O_a$). Higher values prioritize designs that minimize overall internal loading."),
+            ("Buckling Distribution Factor", 25.0, "Weight for buckling distribution factor."),
+            ("Buckling Penalty", 100.0, "Weight for buckling penalty."),
+            ("Material Usage", 50.0, "Weight for material usage."),
+            ("Compression Uniformity", 10.0, "Weight for compression uniformity."),
+            ("Average Force Magnitude", 40, "Weight for average internal forces."),
         ]
         
         for name, initial_value, tooltip in sliders_config:
@@ -112,10 +325,9 @@ class MainWindow(QMainWindow):
             slider.setValue(int(initial_value*100))
             slider.setSingleStep(1)
             slider.setToolTip(tooltip)
-            
             value_label = QLabel(f"{initial_value:.2f}")
-            slider.valueChanged.connect(lambda value, vl=value_label: vl.setText(f"{value/100:.2f}"))
-
+            value_label.setFixedWidth(60)
+            slider.valueChanged.connect(lambda v, vl=value_label: vl.setText(f"{v/100:.2f}"))
             param_layout.addWidget(label, row, 0)
             param_layout.addWidget(slider, row, 1)
             param_layout.addWidget(value_label, row, 2)
@@ -124,7 +336,7 @@ class MainWindow(QMainWindow):
 
         control_layout.addWidget(param_group)
 
-        # Nodes to Optimize
+        # --- Nodes to Optimize ---
         node_group = QFrame()
         node_layout = QVBoxLayout(node_group)
         node_group.setFrameShape(QFrame.StyledPanel)
@@ -135,22 +347,39 @@ class MainWindow(QMainWindow):
         self.node_table.setHorizontalHeaderLabels(['Node ID'])
         self.node_table.setSelectionMode(QAbstractItemView.MultiSelection)
         self.node_table.setSelectionBehavior(QAbstractItemView.SelectRows)
-        
         node_layout.addWidget(self.node_table)
         control_layout.addWidget(node_group)
 
-        # Run Button
+        # --- Run Button ---
         self.run_button = QPushButton("Run Optimization")
         self.run_button.clicked.connect(self.run_optimization)
-        self.run_button.setEnabled(False)  # Disable until data is loaded
+        self.run_button.setEnabled(False)
         control_layout.addWidget(self.run_button)
 
-        # Add a placeholder for a status label
+        # --- Status Label ---
         self.status_label = QLabel("Ready.")
-        self.status_label.setWordWrap(True) # Make sure the text wraps
+        self.status_label.setWordWrap(True)
         control_layout.addWidget(self.status_label)
 
         self.main_layout.addWidget(control_panel)
+
+        return control_panel
+
+    # -------------------- 🌈 THEMING SYSTEM --------------------
+    def toggle_theme(self):
+        """Switch between light and dark theme."""
+        self.current_theme = "dark" if self.current_theme == "light" else "light"
+        self.apply_theme(self.current_theme)
+        self.theme_button.setText("🌞 Light Mode" if self.current_theme == "dark" else "🌙 Dark Mode")
+
+    def apply_theme(self, theme_name):
+        """Apply a global stylesheet theme."""
+        if theme_name == "dark":
+            theme = DARK_THEME
+        else:
+            theme = LIGHT_THEME
+        self.setStyleSheet(theme)
+        self.apply_matplotlib_theme(theme_name)
 
     def create_visualization_panel(self):
         """Creates the visualization panel on the right side of the UI."""
@@ -177,6 +406,31 @@ class MainWindow(QMainWindow):
 
         viz_layout.addWidget(self.tab_widget)
         self.main_layout.addWidget(viz_panel)
+
+        return viz_panel
+
+    def apply_matplotlib_theme(self, theme_name):
+        """Apply matching Matplotlib color theme."""
+        if theme_name == "dark":
+            self.truss_canvas.fig.patch.set_facecolor("#2b2b2b")
+            self.truss_canvas.axes.set_facecolor("#2f2f2f")
+            self.truss_canvas.axes.tick_params(colors="white", which="both")
+            self.truss_canvas.axes.xaxis.label.set_color("white")
+            self.truss_canvas.axes.yaxis.label.set_color("white")
+            self.truss_canvas.axes.title.set_color("white")
+            for spine in self.truss_canvas.axes.spines.values():
+                spine.set_color("white")
+            self.truss_canvas.draw()
+        else:
+            self.truss_canvas.fig.patch.set_facecolor("#ffffff")
+            self.truss_canvas.axes.set_facecolor("#ffffff")
+            self.truss_canvas.axes.tick_params(colors="black", which="both")
+            self.truss_canvas.axes.xaxis.label.set_color("black")
+            self.truss_canvas.axes.yaxis.label.set_color("black")
+            self.truss_canvas.axes.title.set_color("black")
+            for spine in self.truss_canvas.axes.spines.values():
+                spine.set_color("black")
+            self.truss_canvas.draw()
 
     def select_design_directory(self):
         """Opens a directory selector dialog and loads the selected data."""
@@ -298,8 +552,7 @@ class MainWindow(QMainWindow):
         self.truss_canvas.axes.set_aspect('equal', 'box')
         self.truss_canvas.axes.grid(True)
         self.truss_canvas.draw()
-
-        
+ 
     def update_metrics_table(self, metrics):
         """Updates the metrics table with the latest calculated values."""
         self.metrics_table.setRowCount(len(metrics))
@@ -346,12 +599,14 @@ class MainWindow(QMainWindow):
         weights = {
             'buckling_distribution_factor': self.weights_sliders['Buckling Distribution Factor'].value() / 100.0,
             'buckling_penalty': self.weights_sliders['Buckling Penalty'].value() / 100.0,
-            'material_cost': self.weights_sliders['Material Cost'].value() / 100.0,
+            'material_usage': self.weights_sliders['Material Usage'].value() / 100.0,
             'compressive_uniformity': self.weights_sliders['Compression Uniformity'].value() / 100.0,
             'average_force_magnitude': self.weights_sliders['Average Force Magnitude'].value() / 100.0,
         }
         
         # Initial analysis to show metrics before optimization
+        stresses_df, displacements = run_truss_simulation(self.data)
+        self.data['original_forces'] = stresses_df['axial_force'] if not stresses_df.empty else pd.Series(dtype=float)
         initial_score, initial_metrics, _ = get_objective(self.data, weights)
         print("Initial Metrics:", initial_metrics)
         self.update_metrics_table(initial_metrics)
