@@ -46,7 +46,7 @@ class MainWindow(QMainWindow):
         self.current_data_dir = ""
         self.data = {}
         self.setWindowTitle("Truss Optimizer & Analysis")
-        self.setGeometry(100, 100, 1200, 800)
+        self.setGeometry(100, 100, 1400, 900)
 
         self.central_widget = QWidget()
         self.setCentralWidget(self.central_widget)
@@ -96,20 +96,21 @@ class MainWindow(QMainWindow):
         self.weights_sliders = {}
         row = 1
         
-        # Define sliders with their tooltips and initial values
+        # Define sliders with their tooltips and initial values, based on SSA 7 objectives
         sliders_config = [
-            ("Safety Margin", 1.0, "Weight for the safety margin ($\\gamma+2s_{\\mu}$) metric. Higher values prioritize safety over other factors."),
-            ("Buckling Penalty", 1000.0, "Weight for the buckling penalty. A very high value ensures the optimizer avoids any design that causes buckling."),
-            ("Material Cost", 1000.0, "Weight for the total material cost (volume) of the truss. Higher values prioritize lighter designs."),
-            ("Average Force Magnitude", 0.1, "Weight for the average magnitude of forces in the truss. Higher values prioritize designs that distribute loads more evenly."),
+            ("Buckling Distribution Factor", 25.0, "Weight for the Buckling Distribution Factor ($O_d = \gamma+2s_{\mu}$). Lower values prioritize safety."),
+            ("Buckling Penalty", 100.0, "Weight for the Buckling Failure Penalty ($O_b$). A very high value ensures the optimizer avoids any design that causes $\mu_i \ge 1$."),
+            ("Material Cost", 50.0, "Weight for the Material Cost ($O_m = \sum A_i L_i$). Higher values prioritize lighter designs."),
+            ("Compression Uniformity", 10.0, "Weight for the Compression Uniformity ($O_u = s_{\mu}/\gamma$)."),
+            ("Average Force Magnitude", 40, "Weight for the Average Magnitude of Internal Forces ($O_a$). Higher values prioritize designs that minimize overall internal loading."),
         ]
         
         for name, initial_value, tooltip in sliders_config:
             label = QLabel(name)
             slider = QSlider(Qt.Horizontal)
             slider.setRange(0, 10000)
-            slider.setValue(int(initial_value * 100))
-            slider.setSingleStep(10)
+            slider.setValue(int(initial_value*100))
+            slider.setSingleStep(1)
             slider.setToolTip(tooltip)
             
             value_label = QLabel(f"{initial_value:.2f}")
@@ -233,15 +234,30 @@ class MainWindow(QMainWindow):
         supports_df = data['supports']
         
         # Get the displacements and stresses to display member forces
-        stresses_df, displacements = run_truss_simulation(data)
-        
+        try:
+            stresses_df, displacements = run_truss_simulation(data)
+        except Exception as e:
+            print(f"⚠️ Truss simulation failed: {e}")
+            stresses_df = pd.DataFrame(columns=['element', 'axial_force'])
+            displacements = None
+
         # Plot members
         for _, row in trusses_df.iterrows():
             p1 = points_df.loc[points_df['Node'] == row['start'], ['x', 'y']].values[0]
             p2 = points_df.loc[points_df['Node'] == row['end'], ['x', 'y']].values[0]
-            
-            force = stresses_df.loc[stresses_df['element'] == row['element'], 'axial_force'].iloc[0]
-            color = 'red' if force < 0 else 'blue'
+
+            try:
+                force_row = stresses_df.loc[stresses_df['element'] == row['element'], 'axial_force']
+                if not force_row.empty:
+                    force = force_row.iloc[0]
+                    color = 'red' if force < 0 else 'blue'
+                else:
+                    force = None
+                    color = 'gray'  # fallback color if no force calculated
+            except Exception as e:
+                print(f"⚠️ Could not retrieve force for element {row['element']}: {e}")
+                force = None
+                color = 'gray'
             
             self.truss_canvas.axes.plot([p1[0], p2[0]], [p1[1], p2[1]], color=color)
 
@@ -259,7 +275,7 @@ class MainWindow(QMainWindow):
         # Plot loads as arrows
         if data['loads'] is not None:
             max_truss_span = max(points_df['x'].max() - points_df['x'].min(), 
-                                 points_df['y'].max() - points_df['y'].min())
+                                points_df['y'].max() - points_df['y'].min())
             arrow_scale = max_truss_span * 0.1  # Scale arrows to 10% of the truss's largest dimension
             
             for _, row in data['loads'].iterrows():
@@ -282,6 +298,7 @@ class MainWindow(QMainWindow):
         self.truss_canvas.axes.set_aspect('equal', 'box')
         self.truss_canvas.axes.grid(True)
         self.truss_canvas.draw()
+
         
     def update_metrics_table(self, metrics):
         """Updates the metrics table with the latest calculated values."""
@@ -325,11 +342,12 @@ class MainWindow(QMainWindow):
             self.run_button.setEnabled(True)
             return
 
-        # Get the weights from the sliders
+        # Get the weights from the sliders, mapping slider names to objective names
         weights = {
-            'safety_margin': self.weights_sliders['Safety Margin'].value() / 100.0,
+            'buckling_distribution_factor': self.weights_sliders['Buckling Distribution Factor'].value() / 100.0,
             'buckling_penalty': self.weights_sliders['Buckling Penalty'].value() / 100.0,
             'material_cost': self.weights_sliders['Material Cost'].value() / 100.0,
+            'compressive_uniformity': self.weights_sliders['Compression Uniformity'].value() / 100.0,
             'average_force_magnitude': self.weights_sliders['Average Force Magnitude'].value() / 100.0,
         }
         
@@ -352,14 +370,17 @@ class MainWindow(QMainWindow):
 
         # --- Save final optimized points to CSV ---
         output_file = os.path.join(self.output_dir, "final_points.csv")
+        # Ensure 'points' is the DataFrame from the optimized_data dictionary for correct saving
+        optimized_points_df = optimized_data['points']
+        # The writerow assumes an iterable of values. DataFrame.values.tolist() will work.
         with open(output_file, mode="w", newline="") as f:
             writer = csv.writer(f)
-            writer.writerow(["x", "y"])  # header
-            for point in optimized_data['points']:
-                writer.writerow(point)
+            # Write header from DataFrame columns, ensuring 'Node' is first if we want it
+            writer.writerow(optimized_points_df.columns.tolist())
+            writer.writerows(optimized_points_df.values.tolist())
 
         # --- Update UI ---
-        self.status_label.setText("Optimization complete! Results saved to final_points.csv")
+        self.status_label.setText(f"Optimization complete! Final Score: {final_score:.4f}. Results saved to {output_file}")
         self.update_metrics_table(final_metrics)
         self.update_points_table(optimized_data['points'])
         self.show_truss(optimized_data)

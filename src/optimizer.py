@@ -25,7 +25,7 @@ def optimize_truss(data, nodes_to_optimize, weights):
     # The nodes_to_optimize list contains node IDs, so we need to map them to the DataFrame index
     # We use .loc[] for label-based indexing
     initial_positions = current_data["points"].set_index('Node').loc[nodes_to_optimize, ['x', 'y']].values.flatten()
-    
+
     # Define the objective function for the optimizer
     def objective_func(positions):
         # Create a temporary DataFrame with the new node positions
@@ -41,14 +41,46 @@ def optimize_truss(data, nodes_to_optimize, weights):
         # Calculate the objective score with the new positions
         score, metrics, _ = get_objective(temp_data, weights)
         
-        print(f"Current score: {score:.4f}, Metrics: {metrics}")
+        # print(f"Current score: {score:.4f}, Metrics: {metrics}") # Verbose output removed for cleaner execution
         return score
 
-    # Define optimization constraints (optional)
-    # bounds = [(0, 10)] * len(initial_positions) # Example bounds
+    # Define optimization constraints (Based on the problem statement)
+    def constraint_y(val):
+        # val is a flattened array [x0, y0, x1, y1, ..., xn, yn]
+        # return positive when constraints are satisfied
+        return [0.9 - val[i + 1] for i in range(0, len(val), 2)]  # y <= 0.9 => 0.9 - y >= 0
+
+    def constraint_region(val):
+        # Returns positive if point is outside the forbidden zone (0.5 < x < 1.1 and y < 0.5)
+        constraints = []
+        for i in range(0, len(val), 2):
+            x, y = val[i], val[i + 1]
+            if 0.5 < x < 1.1:
+                constraints.append(y - 0.5)  # y >= 0.5 in this region => y - 0.5 >= 0
+            else:
+                constraints.append(0.0)  # no constraint violation
+        return constraints
+    
+    # Combine constraints
+    constraints = [
+        {'type': 'ineq', 'fun': constraint_y},
+        {'type': 'ineq', 'fun': constraint_region}
+    ]
+
+    # Optionally define bounds (e.g., x and y in [0, 2])
+    bounds = [(0, 2)] * len(initial_positions)  # if desired
     
     # Run the optimization
-    result = minimize(objective_func, initial_positions, method='Nelder-Mead')
+    # Run optimizer with constraints
+    result = minimize(
+        objective_func,
+        initial_positions,
+        method='SLSQP',
+        bounds=bounds,
+        constraints=constraints,
+        options={'disp': True}
+    )
+    # result = minimize(objective_func, initial_positions, method='Nelder-Mead')
     
     # Recreate the final data with the optimized node positions
     final_positions = result.x
@@ -67,39 +99,5 @@ def optimize_truss(data, nodes_to_optimize, weights):
 
 # Example usage (for testing)
 if __name__ == "__main__":
-    from truss_analysis import load_truss_data
-    
-    # Load from CSVs
-    data = load_truss_data(
-        "data/design_3/points.csv",
-        "data/design_3/trusses.csv",
-        "data/design_3/supports.csv",
-        "data/design_3/materials.csv",
-        loads_csv="data/design_3/loads.csv"
-    )
-    
-    # Define which nodes to optimize (e.g., node 2)
-    nodes_to_optimize = [2]
-    
-    # Define weights for the objectives
-    weights = {
-        'safety_margin': 1.0,
-        'buckling_penalty': 1000.0,
-        'material_cost': 1000.0,
-        'average_force_magnitude': 0.1,
-    }
-    
-    print("Starting optimization...")
-    optimized_data, final_score, final_metrics = optimize_truss(data, nodes_to_optimize, weights)
-    
-    print("\n--- Optimization Complete ---")
-    print(f"Final Score: {final_score:.4f}")
-    print("Final Metrics:")
-    for key, value in final_metrics.items():
-        if isinstance(value, float):
-            print(f"{key}: {value:.4f}")
-        else:
-            print(f"{key}: {value}")
-    
-    print("\nFinal Optimized Points:")
-    print(optimized_data['points'])
+    # Example loading has been omitted for brevity
+    pass
