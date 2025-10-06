@@ -1008,7 +1008,16 @@ class TrussEditor(QMainWindow):
             # Ensure the current model is updated, which will trigger a redraw
             self.current_model.set_dataframe(self.points)
 
-    pass
+    def closeEvent(self, event):
+        """
+        Overrides the default close behavior to ensure the object is
+        deleted when closed, which triggers the QObject.destroyed signal.
+        """
+        # This is the line that makes the difference
+        self.deleteLater()
+        
+        # Proceed with the close event
+        event.accept()
 
 # --- Refactored Entry Point for Unified Compilation ---
 def main():

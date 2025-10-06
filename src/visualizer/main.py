@@ -556,7 +556,17 @@ class TrussRenderer(QMainWindow):
             except Exception as e:
                 self.status_label.setText(f"Error during export: {str(e)}")
                 QMessageBox.critical(self, "Export Error", f"Failed to save file: {str(e)}")
-    pass
+                
+    def closeEvent(self, event):
+        """
+        Overrides the default close behavior to ensure the object is
+        deleted when closed, which triggers the QObject.destroyed signal.
+        """
+        # This is the line that makes the difference
+        self.deleteLater()
+        
+        # Proceed with the close event
+        event.accept()
 
 # --- Refactored Entry Point for Unified Compilation ---
 def main():

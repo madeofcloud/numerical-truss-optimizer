@@ -1,3 +1,5 @@
+# ui_themes.py
+
 LIGHT_THEME = """
 QMainWindow, QWidget {
     background-color: #f7f7f7;
@@ -24,8 +26,8 @@ QLineEdit, QTableWidget {
     background-color: #ffffff;
     border: 1px solid #bfbfbf;
     border-radius: 4px;
-    selection-background-color: #d0e7ff;
-    selection-color: black;
+    selection-background-color: #c72125; /* UPDATED from #d0e7ff */
+    selection-color: white; /* UPDATED from black for contrast */
     gridline-color: #d9d9d9;
 }
 QHeaderView::section {
@@ -61,6 +63,9 @@ QTabBar::tab:selected {
     background: #ffffff;
     border-bottom-color: #ffffff;
 }
+QTableWidget::item:selected { /* Enhanced selection visibility */
+    background-color: #c72125; /* Brighter background */
+}
 QSlider::groove:horizontal {
     border: 1px solid #bbb;
     height: 6px;
@@ -68,8 +73,8 @@ QSlider::groove:horizontal {
     border-radius: 3px;
 }
 QSlider::handle:horizontal {
-    background: #5b9bd5;
-    border: 1px solid #5b9bd5;
+    background: #c72125; /* UPDATED from #5b9bd5 */
+    border: 1px solid #c72125; /* UPDATED from #5b9bd5 */
     width: 14px;
     margin: -5px 0;
     border-radius: 7px;
@@ -104,7 +109,7 @@ QLineEdit, QTableWidget {
     color: #f0f0f0;
     border: 1px solid #5b5b5b;
     border-radius: 4px;
-    selection-background-color: #00bcd4;
+    selection-background-color: #c72125; /* UPDATED from #00bcd4 */
     selection-color: black;
     gridline-color: #3f3f3f;
 }
@@ -147,9 +152,13 @@ QSlider::groove:horizontal {
     background: #444;
     border-radius: 3px;
 }
+}
+QTableWidget::item:selected { /* Enhanced selection visibility */
+    background-color: #c72125; /* Brighter background */
+}
 QSlider::handle:horizontal {
-    background: #00bcd4;
-    border: 1px solid #00bcd4;
+    background: #c72125; /* UPDATED from #00bcd4 */
+    border: 1px solid #c72125; /* UPDATED from #00bcd4 */
     width: 14px;
     margin: -5px 0;
     border-radius: 7px;

@@ -2,7 +2,7 @@
 
 import numpy as np
 from scipy.optimize import minimize
-from analysis import get_objective
+from .analysis import get_objective
 
 def optimize_truss(initial_model, nodes_to_optimize, weights, bounds=None, constraints=None):
     """

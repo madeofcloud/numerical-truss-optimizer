@@ -3,7 +3,7 @@
 import os
 import pandas as pd
 import numpy as np
-import fem_solver  # Use the new solver file
+from . import fem_solver  # Use the new solver file
 import copy
 
 class TrussModel:
