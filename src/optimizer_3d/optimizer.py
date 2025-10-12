@@ -18,12 +18,14 @@ def optimize_truss(initial_model, nodes_to_optimize, weights, bounds=None, const
     Returns:
         A tuple of (optimized_model, final_score, final_metrics).
     """
-    initial_positions = initial_model.points.set_index('Node').loc[nodes_to_optimize, ['x', 'y']].values.flatten()
+    # CRITICAL FIX: Include 'z' for 3D optimization (3 DOF per node)
+    initial_positions = initial_model.points.set_index('Node').loc[nodes_to_optimize, ['x', 'y', 'z']].values.flatten()
 
     # Objective function for the optimizer to minimize
     def objective_func(positions):
         # Work on a copy to avoid modifying the model across iterations
         temp_model = initial_model.copy()
+        # The update_node_positions function now handles the [x1, y1, z1, ...] flat array
         temp_model.update_node_positions(nodes_to_optimize, positions)
         
         # The get_objective function will run the analysis internally
@@ -31,37 +33,13 @@ def optimize_truss(initial_model, nodes_to_optimize, weights, bounds=None, const
         return score
 
     # Default bounds if not provided
+    # Bounds must match the number of optimized variables (3 * number of nodes)
     if bounds is None:
         bounds = [(None, None)] * len(initial_positions)
-        # bounds = [(0, 2)] * len(initial_positions)  # if desired
-
-    def constraint_y(val):
-        # val is a flattened array [x0, y0, x1, y1, ..., xn, yn]
-        # return positive when constraints are satisfied
-        return [0.9 - val[i + 1] for i in range(0, len(val), 2)]  # y <= 0.9 => 0.9 - y >= 0
-    
-    def constraint_region(val):
-        # Returns positive if point is outside the forbidden zone (0.5 < x < 1.1 and y < 0.5)
-        for i in range(0, len(val), 2):
-            x, y = val[i], val[i + 1]
-            if 0.5 < x < 1.1:
-                constraints.append(y - 0.5)  # y >= 0.5 in this region => y - 0.5 >= 0
-            else:
-                constraints.append(0.0)  # no constraint violation
-        return constraints
-
-    def constraint_x_upper(val):
-        # x <= 1.2 => 1.2 - x >= 0
-        return [1.2 - val[i] for i in range(0, len(val), 2)]
 
     # Default constraints if not provided
     if constraints is None:
         constraints = []
-        # constraints = [
-        #     {'type': 'ineq', 'fun': constraint_y},
-        #     {'type': 'ineq', 'fun': constraint_region},
-        #     {'type': 'ineq', 'fun': constraint_x_upper}
-        # ]
 
     # Run the optimization using SciPy's minimizer
     result = minimize(
@@ -77,7 +55,6 @@ def optimize_truss(initial_model, nodes_to_optimize, weights, bounds=None, const
     final_model = initial_model.copy()
     final_model.update_node_positions(nodes_to_optimize, result.x)
     
-    # Get final score and metrics for reporting
     final_score, final_metrics = get_objective(final_model, weights)
-    
+
     return final_model, final_score, final_metrics

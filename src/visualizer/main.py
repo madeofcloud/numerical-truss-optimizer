@@ -269,8 +269,8 @@ class TrussRenderer(QMainWindow):
         legend_layout.addWidget(QLabel("Roller"))
         
         legend_layout.addWidget(QLabel("| <b>Member Forces:</b>"))
-        legend_layout.addWidget(QLabel("<span style='color:blue;'>Tension (T)</span>"))
-        legend_layout.addWidget(QLabel("| <span style='color:red;'>Compression (C)</span>"))
+        legend_layout.addWidget(QLabel("<span style='color:red;'>Tension (T)</span>"))
+        legend_layout.addWidget(QLabel("| <span style='color:blue;'>Compression (C)</span>"))
         
         legend_layout.addWidget(QLabel("| <b>Loads:</b>"))
         legend_layout.addWidget(QLabel("<span style='color:purple;'>Applied Load</span>"))
@@ -416,7 +416,7 @@ class TrussRenderer(QMainWindow):
             
             force_row = stresses_df[stresses_df['element'] == row['element']]
             force = force_row['axial_force'].iloc[0] if not force_row.empty and 'axial_force' in stresses_df.columns else 0
-            color = 'red' if force < 0 else 'blue' 
+            color = 'blue' if force < 0 else 'red' 
             
             self.axes.plot([p1[0], p2[0]], [p1[1], p2[1]], color=color, linewidth=2)
             

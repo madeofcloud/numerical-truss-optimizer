@@ -218,11 +218,14 @@ class OptimizerApp(QMainWindow):
         self.truss_canvas = MplCanvas()
         self.metrics_table = QTableWidget(0, 2)
         self.metrics_table.setHorizontalHeaderLabels(['Metric', 'Value'])
+        self.stresses_table = QTableWidget()
+        self.stresses_table.setEditTriggers(QAbstractItemView.NoEditTriggers)
         self.final_points_table = QTableWidget(0, 3)
         self.final_points_table.setHorizontalHeaderLabels(['Node ID', 'x', 'y'])
         
         self.tab_widget.addTab(self.truss_canvas, "2D Truss Plot")
         self.tab_widget.addTab(self.metrics_table, "Metrics")
+        self.tab_widget.addTab(self.stresses_table, "Member Stresses")
         self.tab_widget.addTab(self.final_points_table, "Final Positions")
         layout.addWidget(self.tab_widget)
         
@@ -255,8 +258,8 @@ class OptimizerApp(QMainWindow):
         self.legend_labels['roller_sym'] = create_symbol_label('D', 'darkgreen')
         self.legend_labels['roller_text'] = QLabel("Roller (Rx=0 or Ry=0)")
         self.legend_labels['member_header'] = QLabel("| <b>Member Forces:</b>")
-        self.legend_labels['tension'] = QLabel("| <span style='color:blue;'>Tension (T)</span>")
-        self.legend_labels['compression'] = QLabel("| <span style='color:red;'>Compression (C)</span>")
+        self.legend_labels['tension'] = QLabel("| <span style='color:red;'>Tension (T)</span>")
+        self.legend_labels['compression'] = QLabel("| <span style='color:blue;'>Compression (C)</span>")
         self.legend_labels['load_header'] = QLabel("| <b>Loads:</b>")
         self.legend_labels['load_text'] = QLabel("<span style='color:purple;'>Applied Load</span>")
         
@@ -353,6 +356,7 @@ class OptimizerApp(QMainWindow):
 
         _, metrics = get_objective(self.model, self._get_weights())
         self._update_metrics_table(metrics)
+        self._update_stresses_table(self.model.stresses_df)
         self._update_points_table(self.model.points)
         
         # FIX: Ensure plot is rendered immediately on load
@@ -388,7 +392,7 @@ class OptimizerApp(QMainWindow):
                 force_row = stresses_df.loc[stresses_df['element'] == row['element'], 'axial_force']
                 if not force_row.empty:
                     force = force_row.iloc[0]
-                    color = 'red' if force < 0 else 'blue' # Compression (C) is red, Tension (T) is blue
+                    color = 'blue' if force < 0 else 'red' # Compression (C) is blue, Tension (T) is red
                 else:
                     color = 'gray'
             except (KeyError, IndexError):
@@ -494,6 +498,43 @@ class OptimizerApp(QMainWindow):
             self.metrics_table.setItem(i, 1, QTableWidgetItem(f"{value:.4f}"))
         self.metrics_table.resizeColumnsToContents()
 
+    def _update_stresses_table(self, df):
+        """Populates the stresses table."""
+
+        # Check if the dataframe is empty (e.g., if analysis failed)
+        if df.empty:
+            self.stresses_table.setRowCount(1)
+            self.stresses_table.setColumnCount(1)
+            self.stresses_table.setHorizontalHeaderLabels(['Status'])
+            self.stresses_table.setItem(0, 0, QTableWidgetItem("3D Analysis failed or no data available."))
+            return
+
+        # Ensure all required columns are present before proceeding
+        required_cols = ['element', 'L', 'axial_force', 'axial_stress', 'Pc']
+        if not all(col in df.columns for col in required_cols):
+            self.stresses_table.setRowCount(1)
+            self.stresses_table.setColumnCount(1)
+            self.stresses_table.setHorizontalHeaderLabels(['Error'])
+            self.stresses_table.setItem(0, 0, QTableWidgetItem("Analysis results are missing required columns."))
+            return
+
+        self.stresses_table.setRowCount(len(df))
+
+        # Select columns to display
+        display_cols = required_cols
+        self.stresses_table.setColumnCount(len(display_cols))
+        self.stresses_table.setHorizontalHeaderLabels(display_cols)
+
+        for i, row in df.iterrows():
+            for j, col in enumerate(display_cols):
+                value = row[col]
+                # Format specific columns
+                if col in ['L', 'axial_force', 'axial_stress', 'Pc']:
+                    item = QTableWidgetItem(f"{value:.2f}" if pd.notna(value) else 'N/A')
+                else:
+                    item = QTableWidgetItem(str(value))
+                self.stresses_table.setItem(i, j, item)
+
     def _update_points_table(self, points_df):
         self.final_points_table.setRowCount(points_df.shape[0])
         for i, row in points_df.iterrows():
@@ -538,6 +579,7 @@ class OptimizerApp(QMainWindow):
         self.status_label.setText(f"Optimization complete! Final Score: {final_score:.4f}")
         self._update_metrics_table(final_metrics)
         self._update_points_table(self.model.points)
+        self._update_stresses_table(self.model.stresses_df)
         self._draw_truss()
         
         self.run_button.setEnabled(True)

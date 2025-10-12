@@ -10,6 +10,7 @@ from PySide6.QtWidgets import (
 
 from editor.main import main as editor_main
 from optimizer.main import main as optimizer_main
+from optimizer_3d.main import main as optimizer_3d_main
 from visualizer.main import main as visualizer_main
 
 # --- Global Style Sheet ---
@@ -79,6 +80,7 @@ SVG_OPTIMIZE = f"""<svg xmlns="http://www.w3.org/2000/svg" fill="none" stroke="{
 <circle cx="17.5" cy="14.5" r=".5" fill="{SVG_COLOR}"/>
 <path d="M3 3v16a2 2 0 0 0 2 2h16"/>
 </svg>"""
+SVG_OPTIMIZE_3D = f"""<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="{SVG_COLOR}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-rotate3d-icon lucide-rotate-3d"><path d="M16.466 7.5C15.643 4.237 13.952 2 12 2 9.239 2 7 6.477 7 12s2.239 10 5 10c.342 0 .677-.069 1-.2"/><path d="m15.194 13.707 3.814 1.86-1.86 3.814"/><path d="M19 15.57c-1.804.885-4.274 1.43-7 1.43-5.523 0-10-2.239-10-5s4.477-5 10-5c4.838 0 8.873 1.718 9.8 4"/></svg>"""
 SVG_VISUALIZE = f"""<svg xmlns="http://www.w3.org/2000/svg" fill="none" stroke="{SVG_COLOR}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24">
 <path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/>
 <path d="M14 2v4a2 2 0 0 0 2 2h4"/>
@@ -169,6 +171,7 @@ class MainWindow(RoundedWindow):
         self.APP_IDS = {
             "editor": ("Design Editor", SVG_EDIT, self.launch_editor),
             "optimizer": ("Numerical Optimizer", SVG_OPTIMIZE, self.launch_optimizer),
+            "optimizer_3d": ("Numerical Optimizer (3D)", SVG_OPTIMIZE_3D, self.launch_optimizer_3d),
             "visualizer": ("Result Visualizer", SVG_VISUALIZE, self.launch_visualizer)
         }
         self.buttons = {} # Store buttons by ID
@@ -326,6 +329,9 @@ class MainWindow(RoundedWindow):
 
     def launch_optimizer(self, app_id):
         self._launch_app(app_id, optimizer_main)
+
+    def launch_optimizer_3d(self, app_id):
+        self._launch_app(app_id, optimizer_3d_main)    
         
     def launch_visualizer(self, app_id):
         self._launch_app(app_id, visualizer_main)
