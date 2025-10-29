@@ -1,8 +1,16 @@
 # Truss Suite: Numerical Truss Optimizer & Editor
 
-**Truss Suite** is an integrated application for the analysis, design, and optimization of 2D and 3D truss structures using the Finite Element Method (FEM), created for the **4CBLA00** course at TU/e.
+**Truss Suite** is an integrated application for the analysis, design, and optimization of 2D and 3D truss structures using the Finite Element Method (FEM), created for the **4CBLA00 – Intro to Mechanical Engineering and Truss Structures** course at the **Eindhoven University of Technology (TU/e)**.
 
-It provides an intuitive graphical interface for structural modeling, optimization, and visualization, built using **PySide6**, **NumPy**, **SciPy**, **Pandas**, and **Matplotlib**.
+The theoretical framework and numerical methodologies implemented in this software are based on the following SSA (Self-Study Assignment) literature:
+
+- **SSA 4 – Numerical Optimization for Minimal Buckling in Truss Structure** [[PDF]](https://drive.google.com/file/d/1M356Uwj5yFHf7XwntmOeOPZjqC-IYwdA/view?usp=sharing)
+- **SSA 7 – Improved Numerical Optimization for Truss Structure Design** [[PDF]](https://drive.google.com/file/d/1EZlkdV5-BKXmi-kVgSFk48kCyGAjLiek/view?usp=sharing)
+- **SSA 8 – Refinement of Numerical Method and Applications** [[PDF]](https://drive.google.com/file/d/1u3qWaCZy13rC43X7HGtPvlIB-plVq25E/view?usp=sharing)
+
+These materials, authored by Csaba Benedek, provide the foundational theory for the finite element formulation and optimization framework applied within the program.
+
+The following program provides an intuitive graphical interface for structural modeling, optimization, and visualization, built using **PySide6**, **NumPy**, **SciPy**, **Pandas**, and **Matplotlib**.
 
 The suite is managed through a single **Launcher** that gives access to the following tools:
 
@@ -34,7 +42,7 @@ The Truss Suite can be launched either from a pre-built executable or directly f
 
 1. **Edit:** Use the **Editor** to define truss geometry, supports, loads, and materials. All data is stored as CSV files in the `data/` directory.
     
-2. **Optimize:** Run the **Optimizer (2D)** or **Optimizer 3D** to define objectives (e.g. stiffness, weight) and perform numerical optimization.
+2. **Optimize:** Run the **Optimizer (2D)** or **Optimizer 3D** to define objectives (e.g., stiffness, weight) and perform numerical optimization.
     
 3. **Visualize:** Open results in the **Visualizer** to inspect deformed shapes, forces, and export high-quality diagrams.
     
