@@ -74,6 +74,11 @@ class TrussModel:
             self.initial_points = self.points.copy()
             
             self._calculate_initial_lengths()
+
+            # Run an initial analysis to get baseline forces
+            self.run_analysis()
+            if not self.stresses_df.empty:
+                self.initial_forces = self.stresses_df['axial_force'].copy()
             
         except Exception as e:
             # Re-raise non-pandas loading exceptions

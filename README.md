@@ -4,9 +4,9 @@
 
 The theoretical framework and numerical methodologies implemented in this software are based on the following SSA (Self-Study Assignment) literature:
 
-- **SSA 4 – Numerical Optimization for Minimal Buckling in Truss Structure** [[PDF]](https://drive.google.com/file/d/1M356Uwj5yFHf7XwntmOeOPZjqC-IYwdA/view?usp=sharing)
-- **SSA 7 – Improved Numerical Optimization for Truss Structure Design** [[PDF]](https://drive.google.com/file/d/1EZlkdV5-BKXmi-kVgSFk48kCyGAjLiek/view?usp=sharing)
-- **SSA 8 – Refinement of Numerical Method and Applications** [[PDF]](https://drive.google.com/file/d/1u3qWaCZy13rC43X7HGtPvlIB-plVq25E/view?usp=sharing)
+- **SSA 4 – Numerical Optimization for Minimal Buckling in Truss Structure** [[PDF]](https://github.com/madeofcloud/numerical-truss-optimizer/tree/main/research/SSA_4_Csaba_Benedek.pdf)
+- **SSA 7 – Improved Numerical Optimization for Truss Structure Design** [[PDF]](https://github.com/madeofcloud/numerical-truss-optimizer/tree/main/research/SSA_7_Csaba_Benedek.pdf)
+- **SSA 8 – Refinement of Numerical Method and Applications** [[PDF]](https://github.com/madeofcloud/numerical-truss-optimizer/tree/main/research/SSA_8_Csaba_Benedek.pdf)
 
 These materials, authored by Csaba Benedek, provide the foundational theory for the finite element formulation and optimization framework applied within the program.
 
