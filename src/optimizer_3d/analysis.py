@@ -78,7 +78,6 @@ def normalized_average_force(stresses_df, initial_forces):
     """Calculates the ratio of current average absolute force to initial average force."""
     avg_force = np.mean(np.abs(stresses_df['axial_force']))
     initial_avg_force = np.mean(np.abs(initial_forces))
-    
     return avg_force / initial_avg_force if initial_avg_force > 0 else 0
 
 def get_objective(model, weights):
